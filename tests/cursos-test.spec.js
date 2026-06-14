@@ -37,7 +37,23 @@ async function fillOtp(page, digits = ['1', '2', '3', '4', '5', '6']) {
  * @param {string} text
  */
 async function clickByText(page, text) {
-  await page.click(`button:has-text("${text}")`);
+  await page.getByText(text).first().click();
+}
+
+/**
+ * Perform login flow
+ * @param {import('@playwright/test').Page} page
+ * @param {string} email - email to use for login
+ */
+async function performLogin(page, email = 'aluno@gmail.com') {
+  await waitForVisible(page, '#email-input');
+  await page.getByRole('textbox', { name: 'E-mail institucional' }).click();
+  await page.getByRole('textbox', { name: 'E-mail institucional' }).fill(email);
+  await page.getByRole('button', { name: 'Enviar código de acesso' }).click();
+  await page.waitForSelector('.otp-wrapper', { state: 'visible' });
+  await fillOtp(page);
+  await clickByText(page, 'Validar e entrar');
+  await page.waitForSelector('#screen-app', { state: 'attached' });
 }
 
 // =============================================================================
@@ -54,15 +70,7 @@ test.describe('ClassHero Application Tests', () => {
   test.describe('Navigation Tests', () => {
     test('Navegação entre Início e Meus Cursos', async ({ page }) => {
       // First perform login
-      await page.fill('#email-input', 'aluno@gmail.com');
-      await page.getByRole('button', { name: 'Enviar código de acesso' }).click();
-      // Wait for OTP step to appear
-      await page.waitForSelector('.otp-wrapper', { state: 'visible' });
-      await fillOtp(page);
-      await clickByText(page, 'Validar e entrar');
-
-      // Wait for app screen
-      await page.waitForSelector('#screen-app', { state: 'attached' });
+      await performLogin(page);
 
       // Ensure navigation button is visible
       await waitForVisible(page, '#nav-cursos');
@@ -89,17 +97,8 @@ test.describe('ClassHero Application Tests', () => {
 
   test.describe('Authentication Tests', () => {
     test('Simulação de acesso com login', async ({ page }) => {
-      // Wait for email input to be visible
-      await waitForVisible(page, '#email-input');
-      await page.getByRole('textbox', { name: 'E-mail institucional' }).click();
-      await page.getByRole('textbox', { name: 'E-mail institucional' }).fill('aluno@gmail.com');
-      await page.getByRole('button', { name: 'Enviar código de acesso' }).click();
-
-      // Fill OTP fields
-      await fillOtp(page);
-
-      // Continue to mission view
-      await page.getByRole('button', { name: 'Validar e entrar' }).click();
+      // Perform login
+      await performLogin(page);
 
       // Verify next view loads
       await page.waitForSelector('#view-missao, #view-cursos', { state: 'attached' });
@@ -108,12 +107,8 @@ test.describe('ClassHero Application Tests', () => {
 
   test.describe('UI Component Tests', () => {
     test('Verificação de elementos na Sidebar', async ({ page }) => {
-      // Perform login steps
-      await page.fill('#email-input', 'aluno@teste.com');
-      await page.getByRole('button', { name: 'Enviar código de acesso' }).click();
-      await page.waitForSelector('.otp-wrapper', { state: 'visible' });
-      await fillOtp(page);
-      await clickByText(page, 'Validar e entrar');
+      // Perform login
+      await performLogin(page, 'aluno@teste.com');
 
       // Wait for sidebar to appear
       await page.waitForSelector('.sidebar-xp-bar', { state: 'attached', timeout: 20000 });
@@ -127,6 +122,40 @@ test.describe('ClassHero Application Tests', () => {
 
       await expect(xpBar).toBeVisible();
       await expect(rankingBtn).toBeVisible();
+    });
+  });
+
+  test.describe('Course Workflow Tests', () => {
+    test('Enviar entrega de trabalho', async ({ page }) => {
+      // Perform login
+      await performLogin(page);
+
+      // Navigate to Meus Cursos
+      await waitForVisible(page, '#nav-cursos');
+      await clickByText(page, 'Meus Cursos');
+
+      // Wait for courses view to be visible
+      await page.waitForSelector('#view-cursos', { state: 'visible' });
+
+      // Click on the specific course (within the courses view)
+      const courseCard = page.locator('#view-cursos').getByText('Desenvolvimento de Apps com Flutter').first();
+      await courseCard.click();
+
+      // Click "Enviar entrega" button on the course card
+      // Use a more resilient selector that looks for the button with the matching text
+      await page.locator('button.mat-btn-primary', { hasText: 'Enviar entrega' }).click();
+
+      // Wait for the submit modal to be attached and open
+      await page.waitForSelector('#submit-modal.open', { state: 'attached' });
+
+      // Wait for upload zone to be visible inside the modal
+      await page.waitForSelector('#upload-zone', { state: 'visible' });
+
+      // Click on upload area
+      await page.locator('#upload-zone').click();
+
+      // Click "Enviar entrega" in the upload modal footer
+      await page.locator('#submit-modal button.btn-primary').click();
     });
   });
 });
